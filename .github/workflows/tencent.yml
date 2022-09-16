@@ -10,7 +10,7 @@ env:
   TKE_REGION: eu-frankfurt
   TKE_CLUSTER_ID: cls-oh2fi8hk
   TKE_CLUSTER_IP: https://43.131.7.42:443
-  DEPLOYMENT_NAME: peidemo
+  DEPLOYMENT_NAME: sbdemo
 
 permissions:
   contents: read
