@@ -1,37 +1,103 @@
-name: deploy serverless scf
-on: #监听的事件和分支配置
+# This workflow will build a docker container, publish and deploy it to Tencent Kubernetes Engine (TKE) when there is a push to the "main" branch.
+#
+# To configure this workflow:
+#
+# 1. Ensure that your repository contains the necessary configuration for your Tencent Kubernetes Engine cluster, 
+#    including deployment.yml, kustomization.yml, service.yml, etc.
+#
+# 2. Set up secrets in your workspace: 
+#    - TENCENT_CLOUD_SECRET_ID with Tencent Cloud secret id
+#    - TENCENT_CLOUD_SECRET_KEY with Tencent Cloud secret key 
+#    - TENCENT_CLOUD_ACCOUNT_ID with Tencent Cloud account id
+#    - TKE_REGISTRY_PASSWORD with TKE registry password
+#
+# 3. Change the values for the TKE_IMAGE_URL, TKE_REGION, TKE_CLUSTER_ID and DEPLOYMENT_NAME environment variables (below).
+
+name: Tencent Kubernetes Engine
+
+on:
   push:
     branches:
-      - main
+      - "main"
+
+# Environment variables available to all jobs and steps in this workflow
+env:
+  TKE_IMAGE_URL: deccr.ccs.tencentyun.com/myfana2022/backend
+  TKE_REGION: eu-frankfurt
+  TKE_CLUSTER_ID: cls-oh2fi8hk
+  TKE_CLUSTER_IP: https://43.131.7.42:443
+  DEPLOYMENT_NAME: sbdemo
+
+
+permissions:
+  contents: read
+
 jobs:
-  build-and-deploy:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    environment: production
     steps:
-      - uses: actions/checkout@v2
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # Build
       - name: Set up JDK 1.8
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           java-version: '8.0.302+8'
-          distribution: 'temurin'
-          server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-          settings-path: ${{ github.workspace }} # location for the settings.xml file
-#      - name: Build with Gradle # Gradle项目用这个
-#        uses: gradle/gradle-build-action@937999e9cc2425eddc7fd62d1053baf041147db7
-#        with:
-#          arguments: build
-      - name: Build with Maven # Maven项目用这个
-        run: mvn -B -DskipTests=true package --file pom.xml
-      - name: create zip folder # 此步骤仅用于Java Web函数，用于存放jar和scf_bootstrap文件。Java事件函数只需要在Serverless.yml中指定Jar目录就好。
-        run: mkdir zip
-      - name: move jar and scf_bootstrap to zip folder # 此步骤仅用于Java Web函数，用于移动jar和scf_bootstrap文件。Java事件函数只需要在Serverless.yml中指定Jar目录就好。注意如果是Maven编译请修改下面的jar路径为/target。
-        run: cp ./build/libs/XXX.jar ./scf_bootstrap ./zip
-      - name: deploy serverless
-        uses: woodyyan/tencent-serverless-action@main
-        env: # 环境变量
-          STAGE: dev #您的部署环境
-          SERVERLESS_PLATFORM_VENDOR: tencent #serverless 境外默认为 aws，配置为腾讯
-          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }} #您的腾讯云账号 sercret ID
-          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }} #您的腾讯云账号 sercret key
+          distribution: 'adopt'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@e6e38bacfdf1a337459f332974bb2327a31aaf4b
+
+      - name: Build jar with Gradle
+        uses: gradle/gradle-build-action@67421db6bd0bf253fb4bd25b31ebb98943c375e1
+        with:
+          arguments: build
+
+      - name: Build Docker Image
+        run:
+          docker build -t ${TKE_IMAGE_URL}:${GITHUB_SHA} .
+
+
+      - name: Login TKE Registry
+        run: |
+          docker login -u ${{ secrets.TENCENT_CLOUD_ACCOUNT_ID }} -p '${{ secrets.TKE_REGISTRY_PASSWORD }}' ${TKE_IMAGE_URL}
+
+      # Push the Docker image to TKE Registry
+      - name: Publish
+        run: |
+          docker push ${TKE_IMAGE_URL}:${GITHUB_SHA}
+
+      - name: Set up Kustomize
+        run: |
+          curl -o .deploy/kustomize --location https://github.com/kubernetes-sigs/kustomize/releases/download/v3.1.0/kustomize_3.1.0_linux_amd64
+          chmod u+x .deploy/kustomize
+
+      - name: Set up ~/.kube/config for connecting TKE cluster
+        uses: TencentCloud/tke-cluster-credential-action@v1
+        with:
+          secret_id: ${{ secrets.TENCENT_SECRET_ID }}
+          secret_key: ${{ secrets.TENCENT_SECRET_KEY }}
+          tke_region: ${{ env.TKE_REGION }}
+          cluster_id: ${{ env.TKE_CLUSTER_ID }}
+
+      - name: Replace API server
+        run: |
+          kubectl config set clusters.${TKE_CLUSTER_ID}.server ${TKE_CLUSTER_IP}
+
+      - name: Switch to TKE context
+        run: |
+          kubectl config use-context ${TKE_CLUSTER_ID}-context-default
+
+      # Deploy the Docker image to the TKE cluster
+      - name: Deploy
+        run: |
+          cd .deploy
+          echo ${TKE_IMAGE_URL}:${GITHUB_SHA}
+          ./kustomize edit set image ${TKE_IMAGE_URL}:${GITHUB_SHA}
+          ./kustomize build . | kubectl apply -f -
+          kubectl rollout status deployment/${DEPLOYMENT_NAME}
+          kubectl get services -o wide
