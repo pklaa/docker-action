@@ -18,10 +18,10 @@ jobs:
           distribution: 'temurin'
           server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
           settings-path: ${{ github.workspace }} # location for the settings.xml file
-      - name: Build with Gradle # Gradle项目用这个
-        uses: gradle/gradle-build-action@937999e9cc2425eddc7fd62d1053baf041147db7
-        with:
-          arguments: build
+#      - name: Build with Gradle # Gradle项目用这个
+#        uses: gradle/gradle-build-action@937999e9cc2425eddc7fd62d1053baf041147db7
+#        with:
+#          arguments: build
       - name: Build with Maven # Maven项目用这个
         run: mvn -B -DskipTests=true package --file pom.xml
       - name: create zip folder # 此步骤仅用于Java Web函数，用于存放jar和scf_bootstrap文件。Java事件函数只需要在Serverless.yml中指定Jar目录就好。
