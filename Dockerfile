@@ -1,3 +1,3 @@
-FROM java:8
+FROM openjdk:1.8
 ADD ./target/book-0.0.1-SNAPSHOT.jar app.jar
 ENTRYPOINT java ${JAVA_OPTS} -jar app.jar
