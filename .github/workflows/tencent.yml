@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 env:
-  TKE_IMAGE_URL: deccr.ccs.tencentyun.com/myfana2022/backend
+  TKE_IMAGE_URL: ccr.ccs.tencentyun.com/myfana2022/backend
   TKE_REGION: eu-frankfurt
   TKE_CLUSTER_ID: cls-oh2fi8hk
   TKE_CLUSTER_IP: https://43.131.7.42:443
