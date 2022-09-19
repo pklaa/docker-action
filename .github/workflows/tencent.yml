@@ -36,8 +36,8 @@ jobs:
 
       - name: Login TKE Registry
         run: |
-#          docker login -u ${{ secrets.TENCENT_CLOUD_ACCOUNT_ID }} -p '${{ secrets.TKE_REGISTRY_PASSWORD }}' ${TKE_IMAGE_URL}
-          docker login deccr.ccs.tencentyun.com --username=200025387639
+          docker login -u ${{ secrets.TENCENT_CLOUD_ACCOUNT_ID }} -p '${{ secrets.TKE_REGISTRY_PASSWORD }}' ${TKE_IMAGE_URL}
+#          docker login deccr.ccs.tencentyun.com --username=200025387639
       # Push the Docker image to TKE Registry
       - name: Publish
         run: |
